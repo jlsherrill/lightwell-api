@@ -1,0 +1,854 @@
+openapi: 3.1.0
+info:
+  title: Lightwell Package Security API
+  version: 0.1.0
+  description: >
+    API for querying repositories, packages, package versions, and security
+    remediations.  Remediations are rebuilds of a package version with one or
+    more security patches applied.  Patches may be simple backports or novel
+    fixes, and may be under embargo.
+
+servers:
+  - url: /api/lightwell/v0.1
+
+# ---------------------------------------------------------------------------
+# Reusable parameter definitions
+# ---------------------------------------------------------------------------
+components:
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      description: Maximum number of items to return.
+      schema:
+        type: integer
+        minimum: 1
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      description: Number of items to skip before starting to return results.
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    Order:
+      name: order
+      in: query
+      description: >
+        Sort order.  A field name followed by `asc` or `desc`.
+        Allowed fields are endpoint-specific.
+      schema:
+        type: string
+      example: "name asc"
+
+  schemas:
+    # ----- enums -----
+    SecurityLevel:
+      type: string
+      description: "Security level: validated or remediated."
+      enum:
+        - validated
+        - remediated
+
+    PackageType:
+      type: string
+      enum:
+        - python
+        - maven
+        - npm
+        - golang
+
+    # ----- resources -----
+    Repository:
+      type: object
+      required:
+        - name
+        - security_level
+        - type
+        - packages_count
+        - versions_count
+        - remediations_count
+      properties:
+        name:
+          type: string
+          example: java-validated
+        security_level:
+          $ref: "#/components/schemas/SecurityLevel"
+        type:
+          $ref: "#/components/schemas/PackageType"
+        packages_count:
+          type: integer
+          example: 456
+        versions_count:
+          type: integer
+          example: 1024
+        remediations_count:
+          type: integer
+          example: 200
+
+    Package:
+      type: object
+      required:
+        - name
+        - security_level
+        - type
+      properties:
+        name:
+          type: string
+          example: requests
+        security_level:
+          $ref: "#/components/schemas/SecurityLevel"
+        type:
+          $ref: "#/components/schemas/PackageType"
+
+    Embargo:
+      type: object
+      description: >
+        Embargo timeline details.  Present only when the remediation is
+        under embargo.
+      required:
+        - embargo_start_date
+        - expected_lift_date
+        - pre_disclosure_summary
+      properties:
+        embargo_start_date:
+          type: string
+          format: date-time
+          description: When the embargo was placed.
+          example: "2025-11-01T00:00:00Z"
+        expected_lift_date:
+          type: string
+          format: date-time
+          description: When the embargo is expected to be lifted.
+          example: "2026-02-01T00:00:00Z"
+        pre_disclosure_summary:
+          type: string
+          description: >
+            Information available before full disclosure — typically a
+            severity rating and affected component without exploit details.
+          example: "High-severity issue in TLS certificate validation. Full details available after embargo lift."
+
+    RemediationSummary:
+      type: object
+      required:
+        - id
+        - resolved_cves
+        - vulnerable_to_cves
+        - embargoed
+      properties:
+        id:
+          type: string
+          example: rhlw-0005
+        resolved_cves:
+          type: array
+          items:
+            type: string
+          example:
+            - CVE-2025-01-01
+        vulnerable_to_cves:
+          type: array
+          items:
+            type: string
+          example:
+            - CVE-2024-01-02
+        embargoed:
+          type: boolean
+        embargo:
+          description: Embargo timeline details. Present only when `embargoed` is `true`.
+          $ref: "#/components/schemas/Embargo"
+
+    PackageVersion:
+      type: object
+      required:
+        - name
+        - security_level
+        - type
+        - version
+      properties:
+        name:
+          type: string
+          example: requests
+        security_level:
+          $ref: "#/components/schemas/SecurityLevel"
+        type:
+          $ref: "#/components/schemas/PackageType"
+        version:
+          type: string
+          example: "1.5.1"
+        latest_remediation:
+          $ref: "#/components/schemas/RemediationSummary"
+
+    RemediationChange:
+      type: object
+      required:
+        - redhat_identifier
+        - cve
+        - patch
+        - backport
+        - novel_fix
+      properties:
+        redhat_identifier:
+          type: string
+          example: x_RHLW-CVE-2023-5022-2022034
+        cve:
+          type: string
+          example: CVE-2023-5022
+        patch:
+          type: string
+          description: Raw patch data.
+        backport:
+          type: boolean
+        novel_fix:
+          type: boolean
+
+    Remediation:
+      type: object
+      required:
+        - name
+        - security_level
+        - version
+        - id
+        - addressed_cves
+        - vulnerable_to_cves
+        - embargoed
+        - changes
+      properties:
+        name:
+          type: string
+          example: requests
+        security_level:
+          $ref: "#/components/schemas/SecurityLevel"
+        version:
+          type: string
+          example: "1.5.1"
+        id:
+          type: string
+          example: rhlw-0005
+        addressed_cves:
+          type: array
+          items:
+            type: string
+          example:
+            - CVE-2025-01-01
+        vulnerable_to_cves:
+          type: array
+          items:
+            type: string
+          example:
+            - CVE-2024-01-02
+        embargoed:
+          type: boolean
+        embargo:
+          description: Embargo timeline details. Present only when `embargoed` is `true`.
+          $ref: "#/components/schemas/Embargo"
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemediationChange"
+
+    # ----- paginated wrappers -----
+    PaginatedRepositories:
+      type: object
+      required: [count, results]
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Repository"
+
+    PaginatedPackages:
+      type: object
+      required: [count, results]
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Package"
+
+    PaginatedPackageVersions:
+      type: object
+      required: [count, results]
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackageVersion"
+
+    PaginatedRemediations:
+      type: object
+      required: [count, results]
+      properties:
+        count:
+          type: integer
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/Remediation"
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+  # ---- Repositories ----
+  /repositories/:
+    get:
+      operationId: listRepositories
+      summary: List repositories
+      tags: [Repositories]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Order"
+        - name: type
+          in: query
+          description: Filter by package ecosystem type.
+          schema:
+            $ref: "#/components/schemas/PackageType"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedRepositories"
+              examples:
+                all-repositories:
+                  summary: All repositories
+                  value:
+                    count: 3
+                    results:
+                      - name: java-validated
+                        security_level: validated
+                        type: maven
+                        packages_count: 456
+                        versions_count: 1024
+                        remediations_count: 200
+                      - name: java-remediated
+                        security_level: remediated
+                        type: maven
+                        packages_count: 312
+                        versions_count: 870
+                        remediations_count: 540
+                      - name: python-remediated
+                        security_level: remediated
+                        type: python
+                        packages_count: 189
+                        versions_count: 602
+                        remediations_count: 95
+                filtered-by-type:
+                  summary: "Filtered with ?type=maven"
+                  value:
+                    count: 2
+                    results:
+                      - name: java-validated
+                        security_level: validated
+                        type: maven
+                        packages_count: 456
+                        versions_count: 1024
+                        remediations_count: 200
+                      - name: java-remediated
+                        security_level: remediated
+                        type: maven
+                        packages_count: 312
+                        versions_count: 870
+                        remediations_count: 540
+
+  /repositories/{repository_name}/packages/:
+    get:
+      operationId: listRepositoryPackages
+      summary: List packages within a repository
+      tags: [Repositories]
+      parameters:
+        - name: repository_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Order"
+        - name: name
+          in: query
+          description: Filter packages by name (exact match).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPackages"
+              examples:
+                all-packages-in-repo:
+                  summary: "All packages in java-validated"
+                  value:
+                    count: 3
+                    results:
+                      - name: ch.qos.logback:logback-access
+                        security_level: validated
+                        type: maven
+                      - name: org.apache.commons:commons-lang3
+                        security_level: validated
+                        type: maven
+                      - name: io.netty:netty-handler
+                        security_level: validated
+                        type: maven
+                filtered-by-name:
+                  summary: "Filtered with ?name=io.netty:netty-handler"
+                  value:
+                    count: 1
+                    results:
+                      - name: io.netty:netty-handler
+                        security_level: validated
+                        type: maven
+
+  /repositories/{repository_name}/packages/{package_name}/:
+    get:
+      operationId: getRepositoryPackage
+      summary: Get a specific package within a repository
+      tags: [Repositories]
+      parameters:
+        - name: repository_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: package_name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Package"
+              examples:
+                single-package:
+                  summary: A single Maven package
+                  value:
+                    name: ch.qos.logback:logback-access
+                    security_level: validated
+                    type: maven
+        "404":
+          description: Package not found in this repository.
+
+  /repositories/{repository_name}/packages/{package_name}/{version}/:
+    get:
+      operationId: getRepositoryPackageVersion
+      summary: Get a specific package version within a repository
+      tags: [Repositories]
+      parameters:
+        - name: repository_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: package_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageVersion"
+              examples:
+                version-with-remediation:
+                  summary: A package version with its latest remediation
+                  value:
+                    name: ch.qos.logback:logback-access
+                    security_level: validated
+                    type: maven
+                    version: "1.1.0"
+                    latest_remediation:
+                      id: rhlw-0012
+                      resolved_cves:
+                        - CVE-2024-12798
+                      vulnerable_to_cves:
+                        - CVE-2025-00100
+                      embargoed: false
+                version-without-remediation:
+                  summary: A package version with no remediations yet
+                  value:
+                    name: ch.qos.logback:logback-access
+                    security_level: validated
+                    type: maven
+                    version: "1.2.0"
+                    latest_remediation: null
+        "404":
+          description: Package version not found.
+
+  /repositories/{repository_name}/packages/{package_name}/{version}/remediations/:
+    get:
+      operationId: listRepositoryPackageVersionRemediations
+      summary: List remediations for a specific package version within a repository
+      tags: [Repositories]
+      parameters:
+        - name: repository_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: package_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Order"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedRemediations"
+              examples:
+                remediations-for-version:
+                  summary: "Remediations for logback-access 1.1.0 in java-validated"
+                  value:
+                    count: 2
+                    results:
+                      - name: ch.qos.logback:logback-access
+                        security_level: validated
+                        version: "1.1.0"
+                        id: rhlw-0012
+                        addressed_cves:
+                          - CVE-2024-12798
+                        vulnerable_to_cves:
+                          - CVE-2025-00100
+                        embargoed: false
+                        changes:
+                          - redhat_identifier: x_RHLW-CVE-2024-12798-2024091
+                            cve: CVE-2024-12798
+                            patch: "--- a/src/main/java/...\n+++ b/src/main/java/..."
+                            backport: true
+                            novel_fix: false
+                      - name: ch.qos.logback:logback-access
+                        security_level: validated
+                        version: "1.1.0"
+                        id: rhlw-0008
+                        addressed_cves:
+                          - CVE-2023-5022
+                        vulnerable_to_cves:
+                          - CVE-2024-12798
+                        embargoed: false
+                        changes:
+                          - redhat_identifier: x_RHLW-CVE-2023-5022-2022034
+                            cve: CVE-2023-5022
+                            patch: "--- a/src/main/java/...\n+++ b/src/main/java/..."
+                            backport: false
+                            novel_fix: true
+
+  # ---- Packages (cross-repository) ----
+  /packages/:
+    get:
+      operationId: listPackages
+      summary: List packages across all repositories
+      tags: [Packages]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Order"
+        - name: type
+          in: query
+          description: Filter by package ecosystem type.
+          schema:
+            $ref: "#/components/schemas/PackageType"
+        - name: name
+          in: query
+          description: Filter by package name (exact match, e.g. `ch.qos.logback:logback-access`).
+          schema:
+            type: string
+        - name: security_level
+          in: query
+          description: Filter by security level (validated or remediated).
+          schema:
+            $ref: "#/components/schemas/SecurityLevel"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPackages"
+              examples:
+                all-packages:
+                  summary: All packages (no filters)
+                  value:
+                    count: 4
+                    results:
+                      - name: requests
+                        security_level: remediated
+                        type: python
+                      - name: ch.qos.logback:logback-access
+                        security_level: validated
+                        type: maven
+                      - name: org.apache.commons:commons-lang3
+                        security_level: validated
+                        type: maven
+                      - name: flask
+                        security_level: remediated
+                        type: python
+                filtered-by-type:
+                  summary: "Filtered with ?type=python"
+                  value:
+                    count: 2
+                    results:
+                      - name: requests
+                        security_level: remediated
+                        type: python
+                      - name: flask
+                        security_level: remediated
+                        type: python
+                filtered-by-name:
+                  summary: "Filtered with ?name=ch.qos.logback:logback-access"
+                  value:
+                    count: 1
+                    results:
+                      - name: ch.qos.logback:logback-access
+                        security_level: validated
+                        type: maven
+
+  # ---- Package Versions (cross-repository) ----
+  /package_versions/:
+    get:
+      operationId: listPackageVersions
+      summary: List package versions across all repositories
+      tags: [Package Versions]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Order"
+        - name: type
+          in: query
+          description: Filter by package ecosystem type.
+          schema:
+            $ref: "#/components/schemas/PackageType"
+        - name: name
+          in: query
+          description: Filter by package name (exact match).
+          schema:
+            type: string
+        - name: repository
+          in: query
+          description: Filter by repository name.
+          schema:
+            type: string
+        - name: security_level
+          in: query
+          description: Filter by security level (validated or remediated).
+          schema:
+            $ref: "#/components/schemas/SecurityLevel"
+        - name: embargoed
+          in: query
+          description: >
+            When `true`, return only package versions that have at least one
+            remediation still under embargo.
+          schema:
+            type: boolean
+        - name: resolves_cve_id
+          in: query
+          description: >
+            Return package versions whose latest remediation resolves this CVE.
+          schema:
+            type: string
+          example: CVE-2026-01-02
+        - name: vulnerable_to_cve_id
+          in: query
+          description: >
+            Return package versions that are vulnerable to this CVE.
+          schema:
+            type: string
+          example: CVE-2026-01-02
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedPackageVersions"
+              examples:
+                all-versions:
+                  summary: All package versions (no filters)
+                  value:
+                    count: 3
+                    results:
+                      - name: requests
+                        security_level: remediated
+                        type: python
+                        version: "2.31.0"
+                        latest_remediation:
+                          id: rhlw-0005
+                          resolved_cves:
+                            - CVE-2025-01-01
+                          vulnerable_to_cves:
+                            - CVE-2024-01-02
+                          embargoed: true
+                          embargo:
+                            embargo_start_date: "2025-11-01T00:00:00Z"
+                            expected_lift_date: "2026-02-01T00:00:00Z"
+                            pre_disclosure_summary: "High-severity issue in TLS certificate validation. Full details available after embargo lift."
+                      - name: requests
+                        security_level: remediated
+                        type: python
+                        version: "2.28.2"
+                        latest_remediation:
+                          id: rhlw-0003
+                          resolved_cves:
+                            - CVE-2024-01-02
+                          vulnerable_to_cves: []
+                          embargoed: false
+                      - name: ch.qos.logback:logback-access
+                        security_level: validated
+                        type: maven
+                        version: "1.1.0"
+                        latest_remediation:
+                          id: rhlw-0012
+                          resolved_cves:
+                            - CVE-2024-12798
+                          vulnerable_to_cves: []
+                          embargoed: false
+                embargoed-java:
+                  summary: "Filtered with ?embargoed=true&type=maven"
+                  value:
+                    count: 1
+                    results:
+                      - name: org.redhat:jboss
+                        security_level: validated
+                        type: maven
+                        version: "7.4.0"
+                        latest_remediation:
+                          id: rhlw-0020
+                          resolved_cves:
+                            - CVE-2026-00050
+                          vulnerable_to_cves: []
+                          embargoed: true
+                          embargo:
+                            embargo_start_date: "2026-06-10T00:00:00Z"
+                            expected_lift_date: "2026-09-01T00:00:00Z"
+                            pre_disclosure_summary: "Critical-severity issue in XML parsing. Full details available after embargo lift."
+                resolves-cve:
+                  summary: "Filtered with ?resolves_cve_id=CVE-2025-01-01"
+                  value:
+                    count: 1
+                    results:
+                      - name: requests
+                        security_level: remediated
+                        type: python
+                        version: "2.31.0"
+                        latest_remediation:
+                          id: rhlw-0005
+                          resolved_cves:
+                            - CVE-2025-01-01
+                          vulnerable_to_cves:
+                            - CVE-2024-01-02
+                          embargoed: true
+                          embargo:
+                            embargo_start_date: "2025-11-01T00:00:00Z"
+                            expected_lift_date: "2026-02-01T00:00:00Z"
+                            pre_disclosure_summary: "High-severity issue in TLS certificate validation. Full details available after embargo lift."
+
+  # ---- Remediations (cross-repository) ----
+  /remediations/:
+    get:
+      operationId: listRemediations
+      summary: List remediations across all repositories
+      tags: [Remediations]
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+        - $ref: "#/components/parameters/Order"
+        - name: name
+          in: query
+          description: Filter by package name.
+          schema:
+            type: string
+        - name: version
+          in: query
+          description: Filter by package version.
+          schema:
+            type: string
+        - name: type
+          in: query
+          description: Filter by package ecosystem type.
+          schema:
+            $ref: "#/components/schemas/PackageType"
+        - name: embargoed
+          in: query
+          description: >
+            When `true`, return only remediations that are still under embargo.
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedRemediations"
+              examples:
+                filtered-by-name-and-version:
+                  summary: "Filtered with ?name=requests&version=2.31.0"
+                  value:
+                    count: 2
+                    results:
+                      - name: requests
+                        security_level: remediated
+                        version: "2.31.0"
+                        id: rhlw-0005
+                        addressed_cves:
+                          - CVE-2025-01-01
+                        vulnerable_to_cves:
+                          - CVE-2024-01-02
+                        embargoed: true
+                        embargo:
+                          embargo_start_date: "2025-11-01T00:00:00Z"
+                          expected_lift_date: "2026-02-01T00:00:00Z"
+                          pre_disclosure_summary: "High-severity issue in TLS certificate validation. Full details available after embargo lift."
+                        changes:
+                          - redhat_identifier: x_RHLW-CVE-2025-01-01-2025010
+                            cve: CVE-2025-01-01
+                            patch: "--- a/requests/adapters.py\n+++ b/requests/adapters.py\n@@ -120,3 +120,5 @@..."
+                            backport: false
+                            novel_fix: true
+                      - name: requests
+                        security_level: remediated
+                        version: "2.31.0"
+                        id: rhlw-0004
+                        addressed_cves:
+                          - CVE-2024-35195
+                        vulnerable_to_cves:
+                          - CVE-2025-01-01
+                        embargoed: false
+                        changes:
+                          - redhat_identifier: x_RHLW-CVE-2024-35195-2024055
+                            cve: CVE-2024-35195
+                            patch: "--- a/requests/sessions.py\n+++ b/requests/sessions.py\n@@ -98,2 +98,6 @@..."
+                            backport: true
+                            novel_fix: false
