@@ -247,6 +247,65 @@ components:
           items:
             $ref: "#/components/schemas/RemediationChange"
 
+    # ----- files -----
+    PackageFile:
+      type: object
+      required:
+        - filename
+        - size
+        - last_modified
+        - category
+        - signature_type
+      properties:
+        filename:
+          type: string
+          example: commons-lang3-3.14.0.rhlw-00015.jar
+        size:
+          type: integer
+          description: File size in bytes.
+          example: 220570
+        last_modified:
+          type: string
+          format: date-time
+          example: "2026-08-10T15:16:00Z"
+        category:
+          type: string
+          description: >
+            The kind of file: package (the rebuilt artifact), sbom (CycloneDX
+            SBOM), pom (Maven POM metadata), provenance (sigstore
+            provenance attestation), source (source jar/archive), or
+            javadoc (Javadoc jar).
+          enum:
+            - package
+            - sbom
+            - pom
+            - provenance
+            - source
+            - javadoc
+          example: package
+        signature_type:
+          type: string
+          description: >
+            If this file is a signature or checksum for another file,
+            indicates the type.  `null` for the primary file itself.
+          enum:
+            - asc
+            - md5
+            - sha1
+            - sha256
+          nullable: true
+          example: null
+
+    PackageFileList:
+      type: object
+      required:
+        - files
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/PackageFile"
+
     # ----- paginated wrappers -----
     PaginatedRepositories:
       type: object
@@ -496,6 +555,190 @@ paths:
                     latest_remediation: null
         "404":
           description: Package version not found.
+
+  /repositories/{repository_name}/packages/{package_name}/{version}/files/:
+    get:
+      operationId: listRepositoryPackageVersionFiles
+      summary: List available files for a specific package version
+      tags: [Repositories]
+      parameters:
+        - name: repository_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: package_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: Filter by file category.
+          schema:
+            type: string
+            enum:
+              - package
+              - sbom
+              - pom
+              - provenance
+              - source
+              - javadoc
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PackageFileList"
+              examples:
+                all-files:
+                  summary: All files for commons-lang3 3.14.0.rhlw-00015
+                  value:
+                    files:
+                      - filename: commons-lang3-3.14.0.rhlw-00015.cyclonedx.json
+                        size: 678060
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: sbom
+                        signature_type: null
+                      - filename: commons-lang3-3.14.0.rhlw-00015.cyclonedx.json.asc
+                        size: 801
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: sbom
+                        signature_type: asc
+                      - filename: commons-lang3-3.14.0.rhlw-00015.cyclonedx.json.md5
+                        size: 32
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: sbom
+                        signature_type: md5
+                      - filename: commons-lang3-3.14.0.rhlw-00015.cyclonedx.json.sha1
+                        size: 40
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: sbom
+                        signature_type: sha1
+                      - filename: commons-lang3-3.14.0.rhlw-00015.cyclonedx.json.sha256
+                        size: 64
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: sbom
+                        signature_type: sha256
+                      - filename: commons-lang3-3.14.0.rhlw-00015.jar
+                        size: 220570
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: package
+                        signature_type: null
+                      - filename: commons-lang3-3.14.0.rhlw-00015.jar.asc
+                        size: 801
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: package
+                        signature_type: asc
+                      - filename: commons-lang3-3.14.0.rhlw-00015.jar.md5
+                        size: 32
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: package
+                        signature_type: md5
+                      - filename: commons-lang3-3.14.0.rhlw-00015.jar.sha1
+                        size: 40
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: package
+                        signature_type: sha1
+                      - filename: commons-lang3-3.14.0.rhlw-00015.jar.sha256
+                        size: 64
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: package
+                        signature_type: sha256
+                      - filename: commons-lang3-3.14.0.rhlw-00015.pom
+                        size: 7782
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: pom
+                        signature_type: null
+                      - filename: commons-lang3-3.14.0.rhlw-00015.pom.asc
+                        size: 801
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: pom
+                        signature_type: asc
+                      - filename: commons-lang3-3.14.0.rhlw-00015.pom.md5
+                        size: 32
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: pom
+                        signature_type: md5
+                      - filename: commons-lang3-3.14.0.rhlw-00015.pom.sha1
+                        size: 40
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: pom
+                        signature_type: sha1
+                      - filename: commons-lang3-3.14.0.rhlw-00015.pom.sha256
+                        size: 64
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: pom
+                        signature_type: sha256
+                      - filename: commons-lang3-3.14.0.rhlw-00015.provenance.sigstore.json
+                        size: 410624
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: provenance
+                        signature_type: null
+                      - filename: commons-lang3-3.14.0.rhlw-00015.provenance.sigstore.json.asc
+                        size: 801
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: provenance
+                        signature_type: asc
+                      - filename: commons-lang3-3.14.0.rhlw-00015.provenance.sigstore.json.md5
+                        size: 32
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: provenance
+                        signature_type: md5
+                      - filename: commons-lang3-3.14.0.rhlw-00015.provenance.sigstore.json.sha1
+                        size: 40
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: provenance
+                        signature_type: sha1
+                      - filename: commons-lang3-3.14.0.rhlw-00015.provenance.sigstore.json.sha256
+                        size: 64
+                        last_modified: "2026-08-10T15:16:00Z"
+                        category: provenance
+                        signature_type: sha256
+
+  /repositories/{repository_name}/packages/{package_name}/{version}/files/{filename}:
+    get:
+      operationId: downloadRepositoryPackageVersionFile
+      summary: Download a specific file for a package version
+      tags: [Repositories]
+      parameters:
+        - name: repository_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: package_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: filename
+          in: path
+          required: true
+          schema:
+            type: string
+          example: commons-lang3-3.14.0.rhlw-00015.jar
+      responses:
+        "200":
+          description: File content.
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: File not found.
 
   /repositories/{repository_name}/packages/{package_name}/{version}/remediations/:
     get:
