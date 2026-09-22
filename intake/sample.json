@@ -1,0 +1,29 @@
+{
+  "vulnerabilities": [
+    {
+      "vulnerability_id": "TEST-001",
+      "packageurl": "pkg:maven/commons-io/commons-io@2.11.0",
+      "component_name": "Apache Commons IO",
+      "component_version": "2.11.0",
+      "title": "Path traversal in file handling",
+      "description": "Test description with commas, commas, commas, commas",
+      "cwe": "CWE-1",
+      "cvss_severity": "MEDIUM",
+      "cvss_score": 6.3,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L",
+      "exploit_tested": true,
+      "reproducer_filename": "reproducer-test-001.py",
+      "customer_priority": "Priority 2"
+    },
+    {
+      "vulnerability_id": "TEST-002",
+      "packageurl": "pkg:pypi/requests@2.31.0",
+      "component_name": "Requests",
+      "component_version": "2.31.0",
+      "title": "Improper certificate validation",
+      "description": "TLS certificate hostname is not verified under certain configurations.",
+      "cvss_severity": "HIGH",
+      "cvss_score": 7.5
+    }
+  ]
+}

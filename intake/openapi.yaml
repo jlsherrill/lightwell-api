@@ -1,0 +1,142 @@
+openapi: 3.1.0
+info:
+  title: Lightwell Vulnerability Intake
+  version: 0.1.0
+  description: >
+    Schema definitions for vulnerability intake records.  Each record
+    describes a single reported vulnerability against a package component,
+    including CVSS scoring and, for novel fixes, exploit testing and
+    reproducer details.  This document defines data structures only and
+    exposes no operations.
+
+# ---------------------------------------------------------------------------
+# Tags — used purely to surface the schema definitions in Redoc, which does
+# not render unreferenced components on its own.  The <SchemaDefinition>
+# tags below are a Redoc extension for embedding a schema in a description.
+# ---------------------------------------------------------------------------
+tags:
+  - name: models
+    x-displayName: Data Models
+    description: |
+      ## ReportedVulnerability
+      <SchemaDefinition schemaRef="#/components/schemas/ReportedVulnerability" showReadOnly={true} showWriteOnly={true} />
+
+      ## IntakeSubmission
+      <SchemaDefinition schemaRef="#/components/schemas/IntakeSubmission" showReadOnly={true} showWriteOnly={true} />
+
+x-tagGroups:
+  - name: Models
+    tags:
+      - models
+
+components:
+  schemas:
+    # ----- enums -----
+    CvssSeverity:
+      type: string
+      description: CVSS qualitative severity rating.
+      enum:
+        - NONE
+        - LOW
+        - MEDIUM
+        - HIGH
+        - CRITICAL
+
+    # ----- resources -----
+    ReportedVulnerability:
+      type: object
+      description: A single reported vulnerability.
+      required:
+        - vulnerability_id
+        - packageurl
+        - component_name
+        - component_version
+        - title
+        - description
+        - cvss_severity
+        - cvss_score
+      properties:
+        vulnerability_id:
+          type: string
+          description: Customer provided, unique identifier for this vulnerability record to help identify this record from others.
+          example: TEST-001
+        packageurl:
+          type: string
+          description: Package URL (purl) identifying the affected package.
+          example: pkg:maven/commons-io/commons-io@2.11.0
+        component_name:
+          type: string
+          description: Human-readable name of the affected component.
+          example: Apache Commons IO
+        component_version:
+          type: string
+          description: Version of the affected component.
+          example: "2.11.0"
+        title:
+          type: string
+          description: Short title summarizing the vulnerability.
+          example: "Path traversal in file handling"
+        description:
+          type: string
+          description: Full description of the vulnerability.
+          example: "Improper validation of file paths allows traversal outside the intended directory."
+        cwe:
+          type: string
+          description: Common Weakness Enumeration identifier, if known.
+          pattern: '^CWE-\d+$'
+          example: CWE-1
+        cvss_severity:
+          $ref: "#/components/schemas/CvssSeverity"
+        cvss_score:
+          type: number
+          format: float
+          description: CVSS base score.
+          minimum: 0.0
+          maximum: 10.0
+          example: 6.3
+        cvss_vector:
+          type: string
+          description: CVSS vector string, if available.
+          example: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L"
+        exploit_tested:
+          type: boolean
+          description: >
+            Whether an exploit was tested against the component.  Required
+            for novel fixes.
+          example: true
+        reproducer_filename:
+          type: string
+          description: >
+            Filename of the included reproducer.  Required for novel fixes.
+          example: reproducer-test-001.py
+        customer_priority:
+          type: string
+          description: Customer-assigned priority for this vulnerability.
+          example: "Priority 2"
+
+    IntakeSubmission:
+      type: object
+      description: >
+        A vulnerability intake submission.  Wraps the reported
+        vulnerabilities and leaves room for additional top-level metadata.
+      required:
+        - vulnerabilities
+      properties:
+        vulnerabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReportedVulnerability"
+          example:
+            - vulnerability_id: TEST-001
+              packageurl: pkg:maven/commons-io/commons-io@2.11.0
+              component_name: Apache Commons IO
+              component_version: "2.11.0"
+              title: "Path traversal in file handling"
+              description: "Test description with commas, commas, commas, commas"
+              cwe: CWE-1
+              cvss_severity: MEDIUM
+              cvss_score: 6.3
+              cvss_vector: "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L"
+              exploit_tested: true
+              reproducer_filename: reproducer-test-001.py
+              customer_priority: "Priority 2"
